@@ -3,49 +3,69 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-   <link rel="stylesheet" href="styles.css">
-    <title>Wi-Fi Credentials</title>
+    <title>Wi-Fi Credentials via Bluetooth</title>
 </head>
 <body>
     <h1>Send Wi-Fi Credentials to ESP32</h1>
-    <form id="wifiForm">
-        <label for="ssid">SSID:</label><br>
-        <input type="text" id="ssid" name="ssid" required><br><br>
-        <label for="password">Password:</label><br>
-        <input type="password" id="password" name="password" required><br><br>
-        <button type="submit">Send Credentials</button>
+    <form id="wifi-form">
+        <label for="ssid">Wi-Fi SSID:</label>
+        <input type="text" id="ssid" name="ssid" required>
+        <br><br>
+        <label for="password">Wi-Fi Password:</label>
+        <input type="password" id="password" name="password" required>
+        <br><br>
+        <button type="button" id="connect-btn">Send via Bluetooth</button>
     </form>
 
-    <p id="status"></p>
+    <p id="status">Status: Not Connected</p>
 
     <script>
-        let bluetoothDevice;
-        let writer;
+        const connectButton = document.getElementById("connect-btn");
+        const statusText = document.getElementById("status");
 
-        document.getElementById("wifiForm").onsubmit = async (e) => {
-            e.preventDefault(); // Prevent form submission
-
+        connectButton.addEventListener("click", async () => {
             const ssid = document.getElementById("ssid").value;
             const password = document.getElementById("password").value;
-            const credentials = ${ssid},${password}\n;
+
+            if (!ssid || !password) {
+                alert("Please fill in both SSID and Password fields.");
+                return;
+            }
 
             try {
-                if (!bluetoothDevice) {
-                    bluetoothDevice = await navigator.bluetooth.requestDevice({
-                        acceptAllDevices: true,
-                        optionalServices: ['00001101-0000-1000-8000-00805f9b34fb'] // Serial port service UUID
-                    });
-                    const server = await bluetoothDevice.gatt.connect();
-                    const service = await server.getPrimaryService('00001101-0000-1000-8000-00805f9b34fb');
-                    const characteristic = await service.getCharacteristic('00001101-0000-1000-8000-00805f9b34fb');
-                    writer = characteristic.writeValue.bind(characteristic);
-                }
-                await writer(new TextEncoder().encode(credentials));
-                document.getElementById("status").innerText = "Credentials sent successfully!";
+                // Request Bluetooth device
+                const device = await navigator.bluetooth.requestDevice({
+                    acceptAllDevices: true, // Adjust to match specific filters for your ESP32
+                    optionalServices: ['0000ffe0-0000-1000-8000-00805f9b34fb'] // Example UUID for ESP32 service
+                });
+
+                statusText.textContent = "Status: Device Found";
+
+                // Connect to the device's GATT server
+                const server = await device.gatt.connect();
+                statusText.textContent = "Status: Connected to Device";
+
+                // Access the primary service
+                const service = await server.getPrimaryService('0000ffe0-0000-1000-8000-00805f9b34fb'); // Update UUID
+                const characteristic = await service.getCharacteristic('0000ffe1-0000-1000-8000-00805f9b34fb'); // Update UUID
+
+                // Combine SSID and Password into the expected format
+                const credentials = ${ssid},${password};
+
+                // Write credentials to the ESP32 characteristic
+                await characteristic.writeValue(new TextEncoder().encode(credentials));
+
+                statusText.textContent = "Status: Credentials Sent!";
+                alert("Wi-Fi credentials sent successfully!");
+
+                // Disconnect
+                server.disconnect();
             } catch (error) {
-                document.getElementById("status").innerText = "Error: " + error.message;
+                console.error("Error:", error);
+                statusText.textContent = "Status: Error";
+                alert("Failed to send credentials. See console for details.");
             }
-        };
+        });
     </script>
 </body>
 </html>
